@@ -524,7 +524,7 @@ def process_one(
             raise XdownError(f"下载失败（无视频或受保护）: {raw}")
 
     # 3) 写元数据
-    if not args.no_metadata and downloaded:
+    if args.metadata and downloaded:
         meta_path = outdir / f"{base}.info.json"
         meta["media"] = media
         meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -630,7 +630,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     m = p.add_argument_group("其他")
     m.add_argument("--video-only", action="store_true", help="只下载 video，忽略 animated_gif 类型的媒体")
-    m.add_argument("--no-metadata", action="store_true", help="不写 .info.json")
+    m.add_argument(
+        "--metadata",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="同时写出 .info.json 元数据（默认不写，避免碍眼）",
+    )
     m.add_argument("--cookies-from-browser", metavar="BROWSER", default=None,
                    help="yt-dlp 回退时使用的浏览器 cookies (chrome/safari/firefox/edge)")
     m.add_argument("--dry-run", action="store_true", help="只显示将要做什么")

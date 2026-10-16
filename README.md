@@ -108,7 +108,7 @@ xdown 1234567890
 | `--mpdecimate` | 丢弃几乎未变的重复帧 |
 | `--rm-video` | 转 GIF 后删除原视频 |
 | `--video-only` | 只下载 video，忽略 animated_gif 媒体 |
-| `--no-metadata` | 不写 `.info.json` |
+| `--metadata` | 额外写出 `.info.json` 元数据（默认不写） |
 | `--cookies-from-browser BROWSER` | yt-dlp 回退时使用浏览器 cookies |
 | `--dry-run` | 只显示将要做什么 |
 
@@ -154,11 +154,11 @@ xdown 1234567890
 xdown <url> --gif --reveal    # 完成后直接在 Finder 里定位到该文件
 ```
 
-文件名格式：`<用户名>_<推文ID>.mp4` / `.gif` / `.info.json`；
+文件名格式：`<用户名>_<推文ID>.mp4` / `.gif`（元数据默认不写，加 `--metadata` 才有 `.info.json`）；
 一条推文里有多个视频时依次加 `_1`、`_2` 后缀。
 结束时会把**绝对路径**打出来。
 
-不想要 `.info.json` 就加 `--no-metadata`；转完 GIF 想丢掉原视频就加 `--rm-video`。
+转完 GIF 想顺手丢掉原视频就加 `--rm-video`。默认只下载视频/转 GIF，不产生多余文件。
 
 ## 剪贴板（可选，`--to-clipboard`）
 
