@@ -1,6 +1,12 @@
 # xdown
 
-下载 X (Twitter) 视频，并可选转成 GIF 的命令行工具。
+> 下载 X (Twitter) 视频，并可选转成 GIF —— 一条命令搞定。
+
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Deps](https://img.shields.io/badge/pip%20deps-none-success)](xdown.py)
+[![Powered by ffmpeg](https://img.shields.io/badge/powered%20by-ffmpeg-orange)](https://ffmpeg.org/)
+
 
 - 单文件 Python 脚本，无第三方 pip 依赖（只用标准库 + 系统里的 `yt-dlp` / `ffmpeg`）
 - 优先走 X 的公开 **syndication 接口**拿视频直链，快且**无需登录**
@@ -19,12 +25,20 @@ uv tool install yt-dlp        # 或: brew install yt-dlp
 brew install ffmpeg           # 或: sudo port install ffmpeg
 ```
 
-让 `xdown` 命令可用：
+下载并让 `xdown` 命令可用：
 
 ```bash
-chmod +x ~/xvideo/xdown ~/xvideo/xdown.py
-ln -sf ~/xvideo/xdown ~/.local/bin/xdown     # ~/.local/bin 已在 PATH 中
+git clone https://github.com/<you>/xdown.git
+cd xdown
+chmod +x xdown xdown.py
+ln -sf "$PWD/xdown" ~/.local/bin/xdown     # ~/.local/bin 通常在 PATH 中
 xdown --help
+```
+
+也可以不安装，直接用：
+
+```bash
+python3 xdown.py <url> --gif
 ```
 
 ## 用法
@@ -163,3 +177,9 @@ gifski -o out.gif --fps 15 -W 480 in.mp4     # 再用 gifski 编码
 - 受保护 / 已删除的推文 syndication 接口会失败，此时用 `--cookies-from-browser chrome`
   让 `yt-dlp` 带登录态重试。
 - 接口对 token 校验较宽松，但仍按算法正确生成，以防将来收紧。
+
+## License
+
+[MIT](LICENSE)
+
+仅供个人学习与合理使用。下载内容的版权归原作者所有，请勿用于商业传播。
