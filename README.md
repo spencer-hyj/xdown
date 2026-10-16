@@ -49,26 +49,21 @@ python3 xdown.py <url> --gif
 
 ## 用法
 
-**不指定 `-o` 时，结果默认直接进系统剪贴板**，文件只落在临时目录（不弄脏你当前目录）：
+**不指定 `-o` 时默认下载到 `~/Downloads`**，跟浏览器下载一个习惯：
 
 ```bash
-xdown <url>              # 下视频 -> 剪贴板
-xdown <url> --gif        # 转 GIF -> 剪贴板
-# 然后到聊天窗口 / Finder 里 Cmd+V 即可
+xdown <url>              # 视频 -> ~/Downloads
+xdown <url> --gif        # GIF  -> ~/Downloads
 ```
 
-粘出去的是**文件引用**，不是路径文本：贴进微信/Slack 是直接发文件，贴进 Finder 是复制文件（动画 GIF 的帧不会丢）。
-
-想落地成文件就显式给目录：
+换目录：
 
 ```bash
-# 这几种都会写入指定目录，不动剪贴板
-xdown <url> --gif -o ~/Downloads
-xdown <url> --gif -o .
-export XDOWN_OUTPUT=~/Downloads    # 改成长期默认，写进 ~/.zshrc
+xdown <url> --gif -o ~/Desktop          # 指定任意目录
+xdown <url> --gif -o .                  # 当前目录
+export XDOWN_OUTPUT=~/Desktop           # 改长期默认，写进 ~/.zshrc
 
-# 两者都要
-xdown <url> --gif -o ~/Downloads --to-clipboard
+xdown <url> --gif --to-clipboard        # 顺便放进剪贴板，可直接 Cmd+V 粘贴
 ```
 
 其他常用组合：
@@ -97,8 +92,8 @@ xdown 1234567890
 
 | 参数 | 说明 |
 | --- | --- |
-| `-o, --output DIR` | 输出目录。**不指定则进剪贴板**（文件落临时目录） |
-| `--to-clipboard` | 即使给了 `-o`，也额外把产物放进剪贴板 |
+| `-o, --output DIR` | 输出目录。**不指定则默认 `~/Downloads`** |
+| `--to-clipboard` | 额外把产物放进系统剪贴板（可粘贴到聊天窗口） |
 | `-f, --force` | 覆盖已存在文件 |
 | `--reveal` | 完成后在 Finder / 文件管理器里定位输出文件 |
 | `-c, --clipboard` | 从剪贴板读取**链接**（方向与上面相反） |
@@ -145,25 +140,31 @@ xdown 1234567890
 
 ## 结果去哪了
 
-| 你怎么敲 | 文件落哪 | 剪贴板 |
+按这个优先级决定输出目录：
+
+| 优先级 | 来源 | 例如 |
 | --- | --- | --- |
-| `xdown <url>` | 系统临时目录 `<tmp>/xdown/`（会被系统定期清理） | ✅ 放进去 |
-| `xdown <url> -o DIR` | `DIR` | 不动 |
-| `xdown <url> -o DIR --to-clipboard` | `DIR` | ✅ 也放进去 |
-
-**不指定 `-o` 时是「只留剪贴板」模式**：不写 `.info.json`，转完 GIF 还会把中间视频删掉，用完就扔。
-
-结束时会把**绝对路径**打出来，所以即使进了临时目录也找得到：
+| 1 | `-o/--output` | `xdown <url> -o ~/Desktop` |
+| 2 | `XDOWN_OUTPUT` 环境变量 | `export XDOWN_OUTPUT=~/Desktop` |
+| 3 | `XDG_DOWNLOAD_DIR`（Linux 惯例） | 桌面环境自动设置的下载目录 |
+| 4 | **`~/Downloads`** | 默认 |
+| 5 | 当前工作目录 | 前面都不存在时的兜底（如无 HOME 的容器） |
 
 ```bash
-open /var/folders/*/*/T/xdown          # macOS 上打开那个临时目录
-xdown <url> -o ~/Downloads --gif --reveal   # 或者干脆指定目录 + 完成后定位
+xdown <url> --gif --reveal    # 完成后直接在 Finder 里定位到该文件
 ```
 
-文件名格式：`<用户名>_<推文ID>.mp4` / `.gif` / `.info.json`（指定目录时才有 json）；
+文件名格式：`<用户名>_<推文ID>.mp4` / `.gif` / `.info.json`；
 一条推文里有多个视频时依次加 `_1`、`_2` 后缀。
+结束时会把**绝对路径**打出来。
 
-## 剪贴板的细节
+不想要 `.info.json` 就加 `--no-metadata`；转完 GIF 想丢掉原视频就加 `--rm-video`。
+
+## 剪贴板（可选，`--to-clipboard`）
+
+```bash
+xdown <url> --gif --to-clipboard    # 存到 ~/Downloads 的同时放进剪贴板
+```
 
 - 放进去的是**文件引用**（macOS 上是 `«class furl»`），不是路径字符串
   - 贴进微信 / Slack / Discord → 直接发送该文件
@@ -171,7 +172,7 @@ xdown <url> -o ~/Downloads --gif --reveal   # 或者干脆指定目录 + 完成�
   - 贴进终端 → 大多数终端不会粘出路径，这是正常的
 - 多个链接时，**最后一个**产物进剪贴板（剪贴板本来就会被后续操作覆盖）
 - 各平台实现：macOS `osascript` / Windows PowerShell `Set-Clipboard` / Linux `wl-copy` → `xclip` → `xsel`
-- 如果系统没有剪贴板工具，产物仍会留在临时目录并打印路径，不会丢
+- 系统没有剪贴板工具时只打印提示，文件照常落地，不会丢
 
 ## 相似的开源实现
 

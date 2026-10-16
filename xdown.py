@@ -7,10 +7,10 @@ xdown - 下载 X (Twitter) 视频，并可选转成 GIF。
   - ffmpeg  (仅转 GIF 时需要，用 palettegen/paletteuse 两遍调色板)
 
 用法示例:
-  xdown <url>                           # 下视频并放进剪贴板（不占目录）
-  xdown <url> --gif                     # 转成 GIF 后放进剪贴板
-  xdown <url> --gif -o ~/Downloads      # 指定目录则落地为文件，不动剪贴板
-  xdown <url> --gif -o . --to-clipboard # 两者都要
+  xdown <url>                           # 下视频，默认存到 ~/Downloads
+  xdown <url> --gif                     # 转成 GIF，默认存到 ~/Downloads
+  xdown <url> --gif -o ~/Desktop        # 指定输出目录
+  xdown <url> --gif --to-clipboard      # 顺便放进剪贴板，可直接粘贴
   xdown <url> --gif --fps 15 --width 480 --start 2.5 --end 7
   xdown <url> --gif --max-size 8 --mpdecimate   # 自动压到 8MB 以内
   xdown -c --gif                        # 从剪贴板读取链接
@@ -585,12 +585,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         default=None,
         metavar="DIR",
-        help="输出目录。不指定则默认把结果放进系统剪贴板（文件落在临时目录）",
+        help="输出目录。不指定则默认下载到 ~/Downloads",
     )
     p.add_argument(
         "--to-clipboard",
         action="store_true",
-        help="即使指定了 -o，也把产物放进剪贴板",
+        help="额外把产物放进系统剪贴板（可直接粘贴到聊天窗口）",
     )
     p.add_argument("-f", "--force", action="store_true", help="覆盖已存在文件")
     p.add_argument("--reveal", action="store_true", help="完成后在文件管理器里打开输出目录 (macOS: Finder)")
@@ -711,6 +711,22 @@ def copy_to_clipboard(path: Path) -> str:
     raise RuntimeError("未找到剪贴板工具（需要 wl-copy / xclip / xsel）")
 
 
+def default_outdir() -> Path:
+    """未指定 -o 时的默认落地目录：Downloads。
+
+    优先尊重 XDG_DOWNLOAD_DIR（Linux），其次 ~/Downloads，都没有则退到当前目录。
+    """
+    xdg = os.environ.get("XDG_DOWNLOAD_DIR")
+    candidates: list[Path] = []
+    if xdg:
+        candidates.append(Path(xdg).expanduser())
+    candidates.append(Path.home() / "Downloads")
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return Path.cwd()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -724,23 +740,14 @@ def main(argv: list[str] | None = None) -> int:
         build_parser().print_help(sys.stderr)
         return 2
 
-    # 目录语义：显式给 -o 或 XDOWN_OUTPUT -> 落地到该目录；否则进剪贴板 + 临时目录
-    explicit = bool(args.output or os.environ.get("XDOWN_OUTPUT"))
-    clipboard_out = args.to_clipboard or not explicit
-    if explicit:
-        outdir = Path(args.output or os.environ["XDOWN_OUTPUT"]).expanduser()
-    else:
-        outdir = Path(tempfile.gettempdir()) / "xdown"
+    # 目录语义：-o > XDOWN_OUTPUT > 默认 Downloads
+    clip_flag = bool(os.environ.get("XDOWN_OUTPUT"))
+    chosen = args.output or (os.environ["XDOWN_OUTPUT"] if clip_flag else None)
+    outdir = Path(chosen).expanduser() if chosen else default_outdir()
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
 
-    # 只有「未指定目录」的纯剪贴板模式才是临时语义：
-    # 不写元数据、转完 GIF 就丢掉中间视频。用户给了 -o 就尊重他的目录。
-    transient = clipboard_out and not explicit
-    if transient:
-        args.no_metadata = True
-        if args.gif:
-            args.rm_video = True
+    clipboard_out = args.to_clipboard
 
     ok: list[Path] = []
     failed: list[str] = []
@@ -777,7 +784,7 @@ def main(argv: list[str] | None = None) -> int:
                 skipped = [p.name for p in ok if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".gif") and p != target]
                 if skipped:
                     log(f"{C_DIM}（其他产物未进剪贴板: {', '.join(skipped)}）{C_END}")
-                hint = f"文件在 {target.parent}，可删。" if transient else f"同时保留在 {target.parent}。"
+                hint = f"文件在 {target.parent}。"
                 log(f"{C_DIM}直接去目标窗口 Ctrl/Cmd+V 即可。{hint}{C_END}")
             except Exception as e:  # noqa: BLE001
                 log(f"{C_YEL}写入剪贴板失败 ({e})，文件仍在 {target}{C_END}")
