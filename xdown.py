@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 """
-xdown - 下载 X (Twitter) 视频 / GIF，并可选转成 GIF。
+xdown - 下载 X (Twitter) 视频，并可选转成 GIF。
 
 依赖:
-  - yt-dlp  (主下载器，支持视频 & X 上的 animated_gif)
-  - ffmpeg  (GIF 转换，使用 palettegen/paletteuse 两遍调色板，画质好体积小)
+  - yt-dlp  (仅在主路径失败时作为回退)
+  - ffmpeg  (仅转 GIF 时需要，用 palettegen/paletteuse 两遍调色板)
 
 用法示例:
-  xdown https://x.com/user/status/1234567890
-  xdown https://x.com/user/status/1234567890 --gif
+  xdown <url>                           # 下视频并放进剪贴板（不占目录）
+  xdown <url> --gif                     # 转成 GIF 后放进剪贴板
+  xdown <url> --gif -o ~/Downloads      # 指定目录则落地为文件，不动剪贴板
+  xdown <url> --gif -o . --to-clipboard # 两者都要
   xdown <url> --gif --fps 15 --width 480 --start 2.5 --end 7
-  xdown <url> --gif --quality high --dither none
   xdown <url> --gif --max-size 8 --mpdecimate   # 自动压到 8MB 以内
-  xdown --clipboard --gif               # 从剪贴板读取链接 (macOS/Linux)
-  xdown <url1> <url2> -o ~/Downloads
+  xdown -c --gif                        # 从剪贴板读取链接
+  xdown <url1> <url2> -o ~/Downloads    # 批量
+
+外部工具路径可用环境变量覆盖（供 npm 等包装器注入自带二进制）:
+  XDOWN_PYTHON / XDOWN_YTDLP / XDOWN_FFMPEG / XDOWN_FFPROBE
 """
 
 from __future__ import annotations
+
+__version__ = "0.1.0"
 
 import argparse
 import json
@@ -73,11 +79,22 @@ def die(msg: str, code: int = 1) -> None:
     sys.exit(code)
 
 
-def which_or_die(name: str, hint: str) -> str:
+def resolve_tool(env_var: str, name: str, hint: str) -> str:
+    """定位外部可执行文件。优先取环境变量覆盖，便于被 npm 等包装器注入自带二进制。"""
+    override = os.environ.get(env_var)
+    if override:
+        p = Path(override).expanduser()
+        if p.is_file() and os.access(p, os.X_OK):
+            return str(p)
+        die(f"{env_var}={override!r} 不是可执行文件")
     path = shutil.which(name)
     if not path:
-        die(f"找不到 `{name}`。{hint}")
+        die(f"找不到 `{name}`。{hint}\n        也可以用环境变量 {env_var} 指定绝对路径。")
     return path
+
+
+def which_or_die(name: str, hint: str) -> str:
+    return resolve_tool(f"XDOWN_{name.upper().replace('-', '_')}", name, hint)
 
 
 def run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess:
@@ -103,8 +120,12 @@ def parse_target(raw: str) -> tuple[str, str | None]:
 
 
 def media_duration(src: Path) -> float | None:
-    """用 ffprobe 读取时长（秒），失败返回 None。"""
-    probe = shutil.which("ffprobe")
+    """用 ffprobe 读取时长（秒），失败返回 None（此函数不致命，缺失时静默降级）。"""
+    override = os.environ.get("XDOWN_FFPROBE")
+    if override and Path(override).expanduser().is_file():
+        probe = str(Path(override).expanduser())
+    else:
+        probe = shutil.which("ffprobe")
     if not probe:
         return None
     try:
@@ -119,15 +140,22 @@ def media_duration(src: Path) -> float | None:
 
 
 def read_clipboard() -> str:
+    found_tool = False
     for cmd in (["pbpaste"], ["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"]):
         if shutil.which(cmd[0]):
+            found_tool = True
             try:
                 out = subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
                 if out.strip():
                     return out.strip()
             except subprocess.CalledProcessError:
                 continue
-    die("无法读取剪贴板(未找到 pbpaste / wl-paste / xclip)")
+    if found_tool:
+        raise XdownError(
+            "剪贴板里没有可用的文本链接"
+            "（如果你刚用 xdown 把文件放进了剪贴板，那里面是文件引用而不是文本）"
+        )
+    die("无法读取剪贴板（未找到 pbpaste / wl-paste / xclip）")
 
 
 # --------------------------------------------------------------------------
@@ -545,12 +573,24 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=__doc__,
     )
     p.add_argument("urls", nargs="*", help="X/Twitter status 链接或纯 tweet ID")
-    p.add_argument("-c", "--clipboard", action="store_true", help="从剪贴板读取链接")
+    p.add_argument("--version", action="version", version=f"xdown {__version__}")
+    p.add_argument(
+        "-c",
+        "--clipboard",
+        action="store_true",
+        help="从剪贴板读取链接（与 --to-clipboard 方向相反）",
+    )
     p.add_argument(
         "-o",
         "--output",
-        default=os.environ.get("XDOWN_OUTPUT", "."),
-        help="输出目录 (默认: 当前目录，可用环境变量 XDOWN_OUTPUT 改默认值)",
+        default=None,
+        metavar="DIR",
+        help="输出目录。不指定则默认把结果放进系统剪贴板（文件落在临时目录）",
+    )
+    p.add_argument(
+        "--to-clipboard",
+        action="store_true",
+        help="即使指定了 -o，也把产物放进剪贴板",
     )
     p.add_argument("-f", "--force", action="store_true", help="覆盖已存在文件")
     p.add_argument("--reveal", action="store_true", help="完成后在文件管理器里打开输出目录 (macOS: Finder)")
@@ -611,18 +651,96 @@ def reveal(path: Path) -> None:
         pass
 
 
+def _applescript_str(s: str) -> str:
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _powershell_str(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+
+def clipboard_target(produced: list[Path], has_gif: bool) -> Path | None:
+    """从产物里挑要放进剪贴板的主文件：优先 GIF，其次视频；多个取最后一个
+    （剪贴板会被后续操作覆盖，最后一个才符合直觉）。"""
+    exts = (".gif",) if has_gif else (".gif", ".mp4", ".mkv", ".webm", ".mov", ".m4v")
+    for p in reversed(produced):
+        if p.suffix.lower() in exts:
+            return p
+    return None
+
+
+def copy_to_clipboard(path: Path) -> str:
+    """把文件放进系统剪贴板。返回所用方式描述，失败抛异常。
+
+    放的是「文件引用」而不是路径文本：粘贴到 Finder = 复制文件，
+    粘贴到微信/Slack 等聊天窗口 = 直接发送该文件。
+    """
+    if sys.platform == "darwin":
+        script = f"set the clipboard to (POSIX file {_applescript_str(str(path))})"
+        subprocess.run(
+            ["osascript", "-e", script], check=True, capture_output=True, text=True
+        )
+        return "文件引用"
+
+    if sys.platform == "win32":
+        ps = f"Set-Clipboard -LiteralPath {_powershell_str(str(path))}"
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps], check=True, capture_output=True
+        )
+        return "文件引用"
+
+    # Linux
+    uri = path.absolute().as_uri() + "\r\n"
+    if shutil.which("wl-copy"):
+        subprocess.run(
+            ["wl-copy", "--type", "text/uri-list"], input=uri.encode(), check=True
+        )
+        return "文件引用 (wl-copy)"
+    if shutil.which("xclip"):
+        subprocess.run(
+            ["xclip", "-selection", "clipboard", "-t", "text/uri-list", "-i"],
+            input=uri.encode(),
+            check=True,
+        )
+        return "文件引用 (xclip)"
+    if shutil.which("xsel"):
+        subprocess.run(
+            ["xsel", "--clipboard", "--input"], input=str(path).encode(), check=True
+        )
+        return "路径文本 (xsel 不支持文件引用)"
+    raise RuntimeError("未找到剪贴板工具（需要 wl-copy / xclip / xsel）")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.clipboard:
-        args.urls.append(read_clipboard())
+        try:
+            args.urls.append(read_clipboard())
+        except XdownError as e:
+            log(f"错误: {e}", C_RED)
+            return 1
     if not args.urls:
         build_parser().print_help(sys.stderr)
         return 2
 
-    outdir = Path(args.output).expanduser()
+    # 目录语义：显式给 -o 或 XDOWN_OUTPUT -> 落地到该目录；否则进剪贴板 + 临时目录
+    explicit = bool(args.output or os.environ.get("XDOWN_OUTPUT"))
+    clipboard_out = args.to_clipboard or not explicit
+    if explicit:
+        outdir = Path(args.output or os.environ["XDOWN_OUTPUT"]).expanduser()
+    else:
+        outdir = Path(tempfile.gettempdir()) / "xdown"
     outdir.mkdir(parents=True, exist_ok=True)
     outdir = outdir.resolve()
+
+    # 只有「未指定目录」的纯剪贴板模式才是临时语义：
+    # 不写元数据、转完 GIF 就丢掉中间视频。用户给了 -o 就尊重他的目录。
+    transient = clipboard_out and not explicit
+    if transient:
+        args.no_metadata = True
+        if args.gif:
+            args.rm_video = True
 
     ok: list[Path] = []
     failed: list[str] = []
@@ -647,6 +765,22 @@ def main(argv: list[str] | None = None) -> int:
             log(f"  {p.name}  ({size_human(p)})")
         if args.reveal:
             reveal(ok[0])
+
+    if clipboard_out and ok:
+        target = clipboard_target(ok, args.gif)
+        if target is None:
+            log(f"{C_YEL}没有可放进剪贴板的产物{C_END}")
+        else:
+            try:
+                how = copy_to_clipboard(target)
+                log(f"\n📋 已投入剪贴板 [{how}]: {target.name}")
+                skipped = [p.name for p in ok if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".gif") and p != target]
+                if skipped:
+                    log(f"{C_DIM}（其他产物未进剪贴板: {', '.join(skipped)}）{C_END}")
+                hint = f"文件在 {target.parent}，可删。" if transient else f"同时保留在 {target.parent}。"
+                log(f"{C_DIM}直接去目标窗口 Ctrl/Cmd+V 即可。{hint}{C_END}")
+            except Exception as e:  # noqa: BLE001
+                log(f"{C_YEL}写入剪贴板失败 ({e})，文件仍在 {target}{C_END}")
     if failed:
         log(f"\n✘ {len(failed)} 个失败: {', '.join(failed)}", C_RED)
         return 1
@@ -659,3 +793,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log("\n已中断", C_YEL)
         sys.exit(130)
+    except XdownError as e:
+        log(f"错误: {e}", C_RED)
+        sys.exit(1)
