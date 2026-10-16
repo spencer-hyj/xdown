@@ -28,7 +28,7 @@ brew install ffmpeg           # 或: sudo port install ffmpeg
 下载并让 `xdown` 命令可用：
 
 ```bash
-git clone https://github.com/<you>/xdown.git
+git clone https://github.com/spencer-hyj/xdown.git
 cd xdown
 chmod +x xdown xdown.py
 ln -sf "$PWD/xdown" ~/.local/bin/xdown     # ~/.local/bin 通常在 PATH 中

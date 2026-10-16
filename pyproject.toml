@@ -28,8 +28,8 @@ dependencies = []
 xdown = "xdown:main"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/xdown"
-Issues = "https://github.com/OWNER/xdown/issues"
+Homepage = "https://github.com/spencer-hyj/xdown"
+Issues = "https://github.com/spencer-hyj/xdown/issues"
 
 [tool.setuptools]
 py-modules = ["xdown"]
