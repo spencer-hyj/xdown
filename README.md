@@ -25,17 +25,23 @@ uv tool install yt-dlp        # 或: brew install yt-dlp
 brew install ffmpeg           # 或: sudo port install ffmpeg
 ```
 
-下载并让 `xdown` 命令可用：
+安装 `xdown` 命令（任选其一）：
 
 ```bash
+# 推荐：uv（装成独立的命令行工具，可 --editable 便于改源码）
+uv tool install git+https://github.com/spencer-hyj/xdown.git
+
+# 或者 pipx
+pipx install git+https://github.com/spencer-hyj/xdown.git
+
+# 或者 clone 后本地安装（--editable 让改源码即时生效）
 git clone https://github.com/spencer-hyj/xdown.git
-cd xdown
-chmod +x xdown xdown.py
-ln -sf "$PWD/xdown" ~/.local/bin/xdown     # ~/.local/bin 通常在 PATH 中
+uv tool install --editable ./xdown
+
 xdown --help
 ```
 
-也可以不安装，直接用：
+也可以完全不安装，直接把脚本跑起来（只有一个文件，无 pip 依赖）：
 
 ```bash
 python3 xdown.py <url> --gif

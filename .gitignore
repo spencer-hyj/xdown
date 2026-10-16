@@ -1,7 +1,23 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# 工具产物
 *.mp4
 *.gif
 *.webm
+*.mkv
+*.mov
 *.info.json
-.part
+*.part
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
